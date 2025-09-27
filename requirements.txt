@@ -1,0 +1,11 @@
+openai
+sentence-transformers
+faiss-cpu
+pypdf
+pandas
+numpy
+scikit-learn
+python-dotenv
+click
+pyarrow
+fastparquet
