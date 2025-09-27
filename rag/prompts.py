@@ -8,4 +8,12 @@ Si recibes una consulta que no pertenece a este ámbito, debes responder estrict
 
 'No puedo responder preguntas fuera de los procedimientos y la información de la UFRO.' """
 
-USER_PROMPT_TEMPLATE = """ ¿Cuál es tu pregunta sobre la normativa de la UFRO?  """
+USER_PROMPT_TEMPLATE = """
+Pregunta:
+{question}
+
+Fragmentos relevantes:
+{snippets}
+
+Responde aquí, siguiendo las instrucciones:
+"""
