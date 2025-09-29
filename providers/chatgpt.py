@@ -14,10 +14,13 @@ class ChatGPTProvider(Provider):
     def name(self) -> str: 
         return "chatgpt" 
 
-    def chat(self, messages: List[Dict[str, str]], **kwargs) -> str: 
-        response = self.client.chat.completions.create( 
-            model=self.model, 
+    def chat(self, messages: List[Dict[str, str]], **kwargs) -> dict:
+        response = self.client.chat.completions.create(
+            model=self.model,
             messages=messages,
             **kwargs
-            ) 
-        return response.choices[0].message.content
+        )
+        return {
+            "text": response.choices[0].message.content,
+            "usage": response.usage
+        }
