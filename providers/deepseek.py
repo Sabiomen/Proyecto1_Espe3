@@ -12,7 +12,15 @@ class DeepSeekProvider(Provider):
     @property
     def name(self) -> str:
         return "deepseek"
-    def chat(self, messages: List[Dict[str, str]], **kwargs) -> dict:
+    def chat(self, messages: List[Dict[str, str]], **kwargs) -> str: 
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            **kwargs
+        )
+        return response.choices[0].message.content
+
+    def chat_with_usage(self, messages: List[Dict[str, str]], **kwargs) -> dict:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -20,5 +28,5 @@ class DeepSeekProvider(Provider):
         )
         return {
             "text": response.choices[0].message.content,
-            "usage": response.usage
+            "usage": response.usage  # incluye tokens usados
         }

@@ -6,6 +6,7 @@ import time
 import csv
 from collections import defaultdict
 from statistics import mean
+import re
 from rag.pipeline import RAGPipeline
 from rag.retrieve import Retriever
 from rag.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
@@ -13,12 +14,9 @@ from providers.chatgpt import ChatGPTProvider
 from providers.deepseek import DeepSeekProvider
 from sentence_transformers import SentenceTransformer
 import numpy as np
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Funciones métricas previas (em_score, coverage_citations) aquí...
 
 def em_score(pred: str, gold: str) -> int:
     return int(pred.strip().lower() == gold.strip().lower())
@@ -48,11 +46,8 @@ def main():
     model_embed = SentenceTransformer("all-MiniLM-L6-v2")
     gold_set = load_gold()
 
-    # Para almacenar resultados detallados (por cada consulta)
     detailed_results = []
-
-    # Para acumular métricas para agregados (por pregunta y provider)
-    metrics_accum = defaultdict(list)  # {(question, provider): [latencies, ems, coverage, costos]}
+    metrics_accum = defaultdict(list)  # (question, provider) -> list of metric dicts
 
     for item in gold_set:
         question = item["question"]
@@ -73,31 +68,26 @@ def main():
             ]
 
             start_llm = time.time()
-            response = pipeline.provider.chat(messages, max_tokens=512, temperature=0.0)
-            latency_total = time.time() - start_total
-            latency_llm = time.time() - start_llm
-
-            if isinstance(response, dict):
+            # Método chat_with_usage debe implementarse en providers para retornar dict con "text" y "usage"
+            if hasattr(pipeline.provider, "chat_with_usage"):
+                response = pipeline.provider.chat_with_usage(messages, max_tokens=512, temperature=0.0)
                 answer = response.get("text", "")
                 usage = response.get("usage", None)
             else:
-                answer = response
+                answer = pipeline.provider.chat(messages, max_tokens=512, temperature=0.0)
                 usage = None
+            latency_total = time.time() - start_total
+            latency_llm = time.time() - start_llm
 
-            tokens_prompt = None
-            tokens_completion = None
-            if usage is not None:
-                tokens_prompt = getattr(usage, "prompt_tokens", None)
-                tokens_completion = getattr(usage, "completion_tokens", None)
+            tokens_prompt = getattr(usage, "prompt_tokens", None) if usage else None
+            tokens_completion = getattr(usage, "completion_tokens", None) if usage else None
 
             citations = re.findall(r"\[([^\]]+)\]", answer) if answer else []
 
             em = em_score(answer, expected_answer) if answer else 0
             coverage = coverage_citations(citations, gold_refs)
-
             cost = estimate_cost(tokens_prompt, tokens_completion, pname)
 
-            # Guardar resultados detallados (para CSV resultados con respuestas y referencias)
             detailed_results.append({
                 "question": question,
                 "provider": pname,
@@ -105,7 +95,6 @@ def main():
                 "references": "; ".join(citations)
             })
 
-            # Acumular métricas para agregación posterior
             metrics_accum[(question, pname)].append({
                 "latency": latency_total,
                 "em": em,
@@ -113,14 +102,13 @@ def main():
                 "cost": cost if cost is not None else 0.0
             })
 
-    # Generar CSV de resultados con respuestas + referencias
-    with open("eval/results.csv", "w", encoding="utf-8", newline="") as f:
-        fieldnames = ["question", "provider", "answer", "references"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    # Guardar CSV con respuestas + referencias
+    with open("eval/results.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["question", "provider", "answer", "references"])
         writer.writeheader()
         writer.writerows(detailed_results)
 
-    # Calcular métricas agregadas y guardar en CSV aparte
+    # Agregar métricas promedio/p95 por pregunta + proveedor y guardar
     metrics_summary = []
     for (question, provider), entries in metrics_accum.items():
         latencies = [e["latency"] for e in entries]
@@ -144,8 +132,7 @@ def main():
             "estimated_cost_usd": round(cost_avg, 6)
         })
 
-    # Guardar CSV de métricas
-    with open("eval/metrics.csv", "w", encoding="utf-8", newline="") as f:
+    with open("eval/metrics.csv", "w", newline="", encoding="utf-8") as f:
         fieldnames = ["question", "provider", "em", "citation_coverage", "latency_avg_sec", "latency_p95_sec", "estimated_cost_usd"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

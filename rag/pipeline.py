@@ -4,17 +4,15 @@ from rag.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 import re
 
 class RAGPipeline:
-    def __init__(self, retriever: Retriever, provider):
+    def __init__(self, retriever, provider):
         self.retriever = retriever
         self.provider = provider
 
     def rewrite_query(self, query: str) -> str:
-        """Por ahora passthrough (sin reescritura)."""
         return query
 
-    def synthesize(self, query: str, top_k=4, max_tokens=512, temperature=0.0):
+    def synthesize(self, query: str, top_k=4, max_tokens=512, temperature=0.0, with_usage=False):
         start_total = time.time()
-
         q_rewritten = self.rewrite_query(query)
 
         start_retrieve = time.time()
@@ -32,30 +30,29 @@ class RAGPipeline:
         ]
 
         start_llm = time.time()
-        answer = self.provider.chat(
-            messages,
-            max_tokens=max_tokens,
-            temperature=temperature
-        )
-        latency_llm = time.time() - start_llm
+        if with_usage and hasattr(self.provider, "chat_with_usage"):
+            response = self.provider.chat_with_usage(
+                messages, max_tokens=max_tokens, temperature=temperature)
+            answer = response["text"]
+            usage = response.get("usage")
+        else:
+            answer = self.provider.chat(
+                messages, max_tokens=max_tokens, temperature=temperature)
+            usage = None
 
+        latency_llm = time.time() - start_llm
         total_latency = time.time() - start_total
 
-        # Extraer tokens usados si el proveedor lo devuelve en algún atributo response.usage
-        tokens_prompt = None
-        tokens_completion = None
-        tokens_total = None
+        citations = re.findall(r"\[([^\]]+)\]", answer)
 
-        # Si tu método chat devuelve también usage, por ejemplo:
-        # response = self.provider.chat(...)
-        # tokens_prompt = response['usage']['prompt_tokens']
-        # tokens_completion = response['usage']['completion_tokens']
-        # tokens_total = response['usage']['total_tokens']
-
-        # Por ahora, si no tienes ese dato, puedes estimar con un contador de palabras o usar un wrapper para OpenAI completions que devuelva uso tokens.
+        # Extraer tokens del uso si viene (objeto), o None
+        tokens_prompt = getattr(usage, "prompt_tokens", None) if usage else None
+        tokens_completion = getattr(usage, "completion_tokens", None) if usage else None
+        tokens_total = getattr(usage, "total_tokens", None) if usage else None
 
         return {
             "answer": answer,
+            "citations": citations,
             "hits": hits,
             "latency_retrieve": latency_retrieve,
             "latency_llm": latency_llm,
