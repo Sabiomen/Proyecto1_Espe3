@@ -39,6 +39,12 @@ def estimate_cost(tokens_prompt, tokens_completion, provider_name):
     else:
         return None
 
+def write_csv(path, fieldnames, rows):
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
 def main():
     retriever = Retriever()
     providers = [ChatGPTProvider(), DeepSeekProvider()]
@@ -46,8 +52,9 @@ def main():
     model_embed = SentenceTransformer("all-MiniLM-L6-v2")
     gold_set = load_gold()
 
-    detailed_results = []
-    metrics_accum = defaultdict(list)  # (question, provider) -> list of metric dicts
+    # Diccionarios: proveedor -> lista resultados o métricas
+    detailed_results = {p.name: [] for p in providers}
+    metrics_accum = {p.name: defaultdict(list) for p in providers}  # {provider: {(question): [metricas]}}
 
     for item in gold_set:
         question = item["question"]
@@ -68,7 +75,6 @@ def main():
             ]
 
             start_llm = time.time()
-            # Método chat_with_usage debe implementarse en providers para retornar dict con "text" y "usage"
             if hasattr(pipeline.provider, "chat_with_usage"):
                 response = pipeline.provider.chat_with_usage(messages, max_tokens=512, temperature=0.0)
                 answer = response.get("text", "")
@@ -88,57 +94,55 @@ def main():
             coverage = coverage_citations(citations, gold_refs)
             cost = estimate_cost(tokens_prompt, tokens_completion, pname)
 
-            detailed_results.append({
+            # Guardar resultados separando provedor
+            detailed_results[pname].append({
                 "question": question,
                 "provider": pname,
                 "answer": answer,
                 "references": "; ".join(citations)
             })
 
-            metrics_accum[(question, pname)].append({
+            # Acumular métricas por pregunta
+            metrics_accum[pname][question].append({
                 "latency": latency_total,
                 "em": em,
                 "coverage": coverage,
                 "cost": cost if cost is not None else 0.0
             })
 
-    # Guardar CSV con respuestas + referencias
-    with open("eval/results.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["question", "provider", "answer", "references"])
-        writer.writeheader()
-        writer.writerows(detailed_results)
+    # Guardar CSVs de resultados separados
+    result_fields = ["question", "provider", "answer", "references"]
+    for pname, rows in detailed_results.items():
+        write_csv(f"eval/results_{pname}.csv", result_fields, rows)
 
-    # Agregar métricas promedio/p95 por pregunta + proveedor y guardar
-    metrics_summary = []
-    for (question, provider), entries in metrics_accum.items():
-        latencies = [e["latency"] for e in entries]
-        ems = [e["em"] for e in entries]
-        coverages = [e["coverage"] for e in entries]
-        costs = [e["cost"] for e in entries]
+    # Guardar CSVs métricas - promedio y p95
+    metric_fields = ["question", "provider", "em", "citation_coverage", "latency_avg_sec", "latency_p95_sec", "estimated_cost_usd"]
+    for pname, questions_metrics in metrics_accum.items():
+        metrics_summary = []
+        for question, entries in questions_metrics.items():
+            latencies = [e["latency"] for e in entries]
+            ems = [e["em"] for e in entries]
+            coverages = [e["coverage"] for e in entries]
+            costs = [e["cost"] for e in entries]
 
-        latency_avg = mean(latencies) if latencies else 0
-        latency_p95 = np.percentile(latencies, 95) if latencies else 0
-        em_avg = mean(ems) if ems else 0
-        coverage_avg = mean(coverages) if coverages else 0
-        cost_avg = mean(costs) if costs else 0
+            latency_avg = mean(latencies) if latencies else 0
+            latency_p95 = np.percentile(latencies, 95) if latencies else 0
+            em_avg = mean(ems) if ems else 0
+            coverage_avg = mean(coverages) if coverages else 0
+            cost_avg = mean(costs) if costs else 0
 
-        metrics_summary.append({
-            "question": question,
-            "provider": provider,
-            "em": round(em_avg, 3),
-            "citation_coverage": round(coverage_avg, 3),
-            "latency_avg_sec": round(latency_avg, 3),
-            "latency_p95_sec": round(latency_p95, 3),
-            "estimated_cost_usd": round(cost_avg, 6)
-        })
+            metrics_summary.append({
+                "question": question,
+                "provider": pname,
+                "em": round(em_avg, 3),
+                "citation_coverage": round(coverage_avg, 3),
+                "latency_avg_sec": round(latency_avg, 3),
+                "latency_p95_sec": round(latency_p95, 3),
+                "estimated_cost_usd": round(cost_avg, 6)
+            })
+        write_csv(f"eval/metrics_{pname}.csv", metric_fields, metrics_summary)
 
-    with open("eval/metrics.csv", "w", newline="", encoding="utf-8") as f:
-        fieldnames = ["question", "provider", "em", "citation_coverage", "latency_avg_sec", "latency_p95_sec", "estimated_cost_usd"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(metrics_summary)
-
-    print("Evaluación completada. CSVs generados: eval/results.csv y eval/metrics.csv")
+    print("Evaluación finalizada. CSVs generados por proveedor en la carpeta eval/")
 
 if __name__ == "__main__":
     main()
