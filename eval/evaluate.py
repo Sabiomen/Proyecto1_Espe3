@@ -12,7 +12,7 @@ from rag.retrieve import Retriever
 from rag.prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from providers.chatgpt import ChatGPTProvider
 from providers.deepseek import DeepSeekProvider
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 import numpy as np
 from dotenv import load_dotenv
 
@@ -20,6 +20,13 @@ load_dotenv()
 
 def em_score(pred: str, gold: str) -> int:
     return int(pred.strip().lower() == gold.strip().lower())
+
+def cosine_sim(pred: str, gold: str, model) -> float:
+    if not pred or not gold:
+        return 0.0
+    emb_pred = model.encode(pred, convert_to_tensor=True)
+    emb_gold = model.encode(gold, convert_to_tensor=True)
+    return float(util.pytorch_cos_sim(emb_pred, emb_gold).item())
 
 def coverage_citations(pred_citations, gold_refs):
     found = sum(1 for c in pred_citations if c in gold_refs)
@@ -52,9 +59,8 @@ def main():
     model_embed = SentenceTransformer("all-MiniLM-L6-v2")
     gold_set = load_gold()
 
-    # Diccionarios: proveedor -> lista resultados o métricas
     detailed_results = {p.name: [] for p in providers}
-    metrics_accum = {p.name: defaultdict(list) for p in providers}  # {provider: {(question): [metricas]}}
+    metrics_accum = {p.name: defaultdict(list) for p in providers}
 
     for item in gold_set:
         question = item["question"]
@@ -92,9 +98,9 @@ def main():
 
             em = em_score(answer, expected_answer) if answer else 0
             coverage = coverage_citations(citations, gold_refs)
+            cos_sim = cosine_sim(answer, expected_answer, model_embed)
             cost = estimate_cost(tokens_prompt, tokens_completion, pname)
 
-            # Guardar resultados separando provedor
             detailed_results[pname].append({
                 "question": question,
                 "provider": pname,
@@ -102,39 +108,49 @@ def main():
                 "references": "; ".join(citations)
             })
 
-            # Acumular métricas por pregunta
             metrics_accum[pname][question].append({
                 "latency": latency_total,
                 "em": em,
                 "coverage": coverage,
+                "cosine_similarity": cos_sim,
                 "cost": cost if cost is not None else 0.0
             })
 
-    # Guardar CSVs de resultados separados
     result_fields = ["question", "provider", "answer", "references"]
     for pname, rows in detailed_results.items():
         write_csv(f"eval/results_{pname}.csv", result_fields, rows)
 
-    # Guardar CSVs métricas - promedio y p95
-    metric_fields = ["question", "provider", "em", "citation_coverage", "latency_avg_sec", "latency_p95_sec", "estimated_cost_usd"]
+    metric_fields = [
+        "question",
+        "provider",
+        "em",
+        "cosine_similarity",
+        "citation_coverage",
+        "latency_avg_sec",
+        "latency_p95_sec",
+        "estimated_cost_usd"
+    ]
     for pname, questions_metrics in metrics_accum.items():
         metrics_summary = []
         for question, entries in questions_metrics.items():
             latencies = [e["latency"] for e in entries]
             ems = [e["em"] for e in entries]
             coverages = [e["coverage"] for e in entries]
+            cos_sims = [e["cosine_similarity"] for e in entries]
             costs = [e["cost"] for e in entries]
 
             latency_avg = mean(latencies) if latencies else 0
             latency_p95 = np.percentile(latencies, 95) if latencies else 0
             em_avg = mean(ems) if ems else 0
             coverage_avg = mean(coverages) if coverages else 0
+            cos_avg = mean(cos_sims) if cos_sims else 0
             cost_avg = mean(costs) if costs else 0
 
             metrics_summary.append({
                 "question": question,
                 "provider": pname,
                 "em": round(em_avg, 3),
+                "cosine_similarity": round(cos_avg, 3),
                 "citation_coverage": round(coverage_avg, 3),
                 "latency_avg_sec": round(latency_avg, 3),
                 "latency_p95_sec": round(latency_p95, 3),
