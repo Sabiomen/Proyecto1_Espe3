@@ -4,6 +4,10 @@ from rag.retrieve import Retriever
 from providers.chatgpt import ChatGPTProvider
 from providers.deepseek import DeepSeekProvider
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 app = Flask(__name__)
 
 # Inicializar retriever y providers
