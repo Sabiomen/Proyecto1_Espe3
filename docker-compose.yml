@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  ufro-assistant:
+    build: .
+    container_name: ufro-assistant
+    ports:
+      - "80:80"
+    env_file:
+      - .env
+    restart: unless-stopped

@@ -9,3 +9,5 @@ python-dotenv
 click
 pyarrow
 fastparquet
+flask
+gunicorn

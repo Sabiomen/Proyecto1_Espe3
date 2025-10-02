@@ -7,7 +7,7 @@ CHUNK_SIZE = 900
 OVERLAP = 120
 
 def clean_text(text: str) -> str:
-    text = text.replace("\x0c", " ")  # saltos de página
+    text = text.replace("\x0c", " ") 
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
@@ -20,7 +20,6 @@ def chunk_text(text: str, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
         if end == len(words):
             break
         start = end - overlap
-
 def pdf_to_chunks(path: Path, doc_id: str, title: str):
     reader = PdfReader(str(path))
     chunks = []
