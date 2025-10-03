@@ -1,0 +1,11 @@
+question,provider,em,cosine_similarity,citation_coverage,latency_avg_sec,latency_p95_sec,estimated_cost_usd
+¿Cuáles son los principios fundamentales que inspiran el reglamento de la Universidad de La Frontera?,deepseek,0,0.673,0.0,8.636,8.636,0.096275
+¿Qué tipos de conductas aborda el reglamento de investigación de la UFRO?,deepseek,0,0.679,0.0,8.949,8.949,0.12545
+¿Qué derechos tienen las personas denunciantes en procesos de violencia o discriminación según la normativa UFRO?,deepseek,0,0.51,0.0,14.774,14.774,0.1186
+¿Cómo se coordina la Universidad con unidades internas y redes externas durante un proceso de investigación?,deepseek,0,0.675,0.0,9.938,9.938,0.107375
+¿Qué significa otorgar un trato digno y equitativo según el reglamento de convivencia universitaria?,deepseek,0,0.585,0.0,9.62,9.62,0.1096
+¿Qué sanciones aplican para personas contratadas a honorarios en caso de conducta inapropiada?,deepseek,0,0.493,0.0,7.82,7.82,0.0992
+¿Cuál es el procedimiento para personas que prestan servicios como contratistas o subcontratistas?,deepseek,0,0.553,0.0,11.21,11.21,0.11325
+¿Cómo se asegura la participación triestamental y con paridad de género en la elaboración del reglamento?,deepseek,0,0.673,0.0,10.805,10.805,0.1053
+¿Cuándo y cómo deben inscribir los estudiantes las asignaturas obligatorias de primer nivel?,deepseek,0,0.466,0.0,5.836,5.836,0.085875
+¿Qué responsabilidades tienen los estudiantes respecto a la inscripción y modificación de asignaturas?,deepseek,0,0.666,0.0,12.857,12.857,0.10175
